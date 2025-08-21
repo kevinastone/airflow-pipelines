@@ -5,3 +5,5 @@ ENV UV_PROJECT_ENVIRONMENT=/home/airflow/.local
 
 COPY pyproject.toml ./
 RUN uv pip install -r pyproject.toml
+
+COPY dags/ /opt/airflow/dags/
