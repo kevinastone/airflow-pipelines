@@ -1,4 +1,0 @@
-apache-airflow
-influxdb-client
-pendulum
-requests

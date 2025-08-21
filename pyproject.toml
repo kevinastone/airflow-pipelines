@@ -1,0 +1,11 @@
+[project]
+name = "airflow-pipelines"
+version = "0.1.0"
+description = "A collection of Apache Airflow DAGs."
+dependencies = ["apache-airflow", "influxdb-client", "pendulum", "requests"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-mock"]
+
+[tool.pytest.ini_options]
+pythonpath = "."
