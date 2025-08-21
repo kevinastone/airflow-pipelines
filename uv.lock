@@ -34,7 +34,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "apache-airflow" },
-    { name = "influxdb-client" },
+    { name = "apache-airflow-providers-influxdb" },
     { name = "pendulum" },
     { name = "requests" },
 ]
@@ -48,7 +48,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "apache-airflow" },
-    { name = "influxdb-client" },
+    { name = "apache-airflow-providers-influxdb" },
     { name = "pendulum" },
     { name = "requests" },
 ]
@@ -216,6 +216,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/08/60/74f374a014e64bcf058982013551bdb79da5e254e7684e51b7797ac43108/apache_airflow_providers_common_sql-1.27.5.tar.gz", hash = "sha256:b761b76695eee5412ba7db36cf6ae8d1b61a59b0b06197377e2a75d52f797283", size = 102087, upload-time = "2025-08-11T05:34:30.224Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9c/5a/1049c2e552a9a501a33a8ab74baa280b5b9455537a892057b5cf27e63b5e/apache_airflow_providers_common_sql-1.27.5-py3-none-any.whl", hash = "sha256:96d2886836b5d7ee0145c474995e3c37e446e08674c6216df9445c4ec00cea53", size = 65551, upload-time = "2025-08-11T05:33:57.82Z" },
+]
+
+[[package]]
+name = "apache-airflow-providers-influxdb"
+version = "2.9.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "apache-airflow" },
+    { name = "influxdb-client" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ff/fc/fa1bc127ce4cd6fe6ff7d86530e65d9df8990f828cc282f2d3a0bacc6327/apache_airflow_providers_influxdb-2.9.3.tar.gz", hash = "sha256:04116363e6325a293a15243e4313421634c6afb185c4007ba74cfaa739778f1a", size = 17013, upload-time = "2025-08-02T06:56:42.597Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/21/70744e344a0228abfcec84bdb30550269b76f82fb308098028669f2e6198/apache_airflow_providers_influxdb-2.9.3-py3-none-any.whl", hash = "sha256:2595404cbd19903ee190d4d8d3f3115e2b67eea8174a94df759bebf64a9cd4bc", size = 14692, upload-time = "2025-08-02T06:54:55.653Z" },
 ]
 
 [[package]]

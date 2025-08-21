@@ -1,14 +1,11 @@
 import logging
-import os
 
 import pendulum
 import requests
 from airflow.decorators import dag, task
-from airflow.exceptions import AirflowNotFoundException
 from airflow.hooks.base import BaseHook
 from airflow.models import Variable
-from influxdb_client import InfluxDBClient, Point
-from influxdb_client.client.write_api import SYNCHRONOUS
+from airflow.providers.influxdb.hooks.influxdb import InfluxDBHook
 
 # Set up logging
 log = logging.getLogger(__name__)
@@ -17,11 +14,7 @@ log = logging.getLogger(__name__)
 # Store sensitive information in Airflow Connections and Variables.
 
 # InfluxDB Connection Details (Store in Airflow Connection)
-# - Conn Id: 'influxdb_default'
-# - Conn Type: 'HTTP'
-# - Host: Your InfluxDB URL (e.g., http://localhost:8086)
-# - Extra: {"bucket": "your_bucket_name"}
-# - Login (org) and Password (token) are optional for no-auth setups.
+# This DAG uses the InfluxDB Airflow Provider.
 INFLUXDB_CONN_ID = "influxdb_default"
 
 # Fitbit Credentials (Store in Airflow Variables)
@@ -56,58 +49,46 @@ def fetch_fitbit_weight_data(ds=None):
 @task()
 def write_data_to_influxdb(weight_data):
     """
-    Writes the fetched weight data to InfluxDB. Skips if no data is provided.
-    Credentials can be supplied via an Airflow connection or environment variables.
+    Writes the fetched weight data to InfluxDB using the InfluxDBHook.
+    Skips if no data is provided.
     """
     if not weight_data:
         log.info("No weight data to write to InfluxDB. Skipping.")
         return
 
     try:
-        url, token, org, bucket = None, None, None, None
-        try:
-            # First, try to get credentials from Airflow Connection
-            conn = BaseHook.get_connection(INFLUXDB_CONN_ID)
-            url = conn.host
-            token = conn.password
-            org = conn.login
-            bucket = conn.extra_dejson.get("bucket")
-            log.info("Successfully loaded credentials from Airflow connection.")
-        except AirflowNotFoundException:
-            # Fallback to environment variables if connection is not found
-            log.info(
-                f"Airflow connection '{INFLUXDB_CONN_ID}' not found. "
-                "Falling back to environment variables."
-            )
-            url = os.environ.get("INFLUXDB_V2_URL")
-            token = os.environ.get("INFLUXDB_V2_TOKEN")
-            org = os.environ.get("INFLUXDB_V2_ORG")
-            bucket = os.environ.get("INFLUXDB_V2_BUCKET")
-
-        if not all([url, bucket]):
+        # The InfluxDBHook handles the connection details (URL, token, org).
+        # We just need to retrieve the target bucket from the connection's extra field.
+        conn = BaseHook.get_connection(INFLUXDB_CONN_ID)
+        bucket = conn.extra_dejson.get("bucket")
+        if not bucket:
             raise ValueError(
-                "InfluxDB URL and bucket are not configured. "
-                "Please set up the 'influxdb_default' connection (Host, Extra.bucket) "
-                "or provide INFLUXDB_V2_URL and INFLUXDB_V2_BUCKET "
-                "environment variables."
+                f"The 'bucket' must be specified in the 'extra' field of the "
+                f"'{INFLUXDB_CONN_ID}' connection."
             )
 
-        with InfluxDBClient(url=url, token=token, org=org) as client:
-            write_api = client.write_api(write_options=SYNCHRONOUS)
+        log.info(f"Preparing to write data to InfluxDB bucket: '{bucket}'")
 
-            points_to_write = []
-            for record in weight_data:
-                p = (
-                    Point("body_metrics")
-                    .tag("source", record.get("source", "Unknown"))
-                    .field("weight_kg", float(record["weight"]))
-                    .field("bmi", float(record["bmi"]))
-                    .time(f"{record['date']}T{record['time']}Z")
-                )
-                points_to_write.append(p)
+        # Instantiate the hook
+        influxdb_hook = InfluxDBHook(conn_id=INFLUXDB_CONN_ID)
 
-            write_api.write(bucket=bucket, org=org, record=points_to_write)
-            log.info(f"Successfully wrote {len(points_to_write)} points to InfluxDB.")
+        # Prepare data points
+        points_to_write = []
+        for record in weight_data:
+            point = {
+                "measurement": "body_metrics",
+                "tags": {"source": record.get("source", "Unknown")},
+                "fields": {
+                    "weight_kg": float(record["weight"]),
+                    "bmi": float(record["bmi"]),
+                },
+                "time": f"{record['date']}T{record['time']}Z",
+            }
+            points_to_write.append(point)
+
+        # Use the hook to write the points
+        influxdb_hook.get_conn().write_api().write(bucket=bucket, record=points_to_write)
+        log.info(f"Successfully wrote {len(points_to_write)} points to InfluxDB.")
 
     except Exception as e:
         log.error(f"Error writing to InfluxDB: {e}")
@@ -122,20 +103,17 @@ def write_data_to_influxdb(weight_data):
     doc_md="""
     ### Fitbit to InfluxDB Weight Data Pipeline
 
-    This DAG fetches daily weight data from the Fitbit API and writes it to an InfluxDB bucket.
+    This DAG fetches daily weight data from the Fitbit API and writes it to an
+    InfluxDB bucket using the official Airflow InfluxDB provider.
 
     **Required Setup:**
-    1.  **InfluxDB Credentials (choose one):**
-        -   **Airflow Connection (Recommended):**
-            -   `Conn Id`: `influxdb_default`
-            -   `Conn Type`: `HTTP`
-            -   `Host`: Your InfluxDB URL (e.g., `http://influxdb:8086`)
-            -   `Extra`: `{"bucket": "your_bucket_name"}`
-            -   `Login` (org) and `Password` (token) are optional for no-auth setups.
-        -   **Environment Variables:**
-            -   `INFLUXDB_V2_URL`: The URL of your InfluxDB instance.
-            -   `INFLUXDB_V2_BUCKET`: The bucket to write data to.
-            -   `INFLUXDB_V2_TOKEN` and `INFLUXDB_V2_ORG` are optional for no-auth setups.
+    1.  **Airflow InfluxDB Connection:**
+        -   `Conn Id`: `influxdb_default`
+        -   `Conn Type`: `InfluxDB`
+        -   `Host`: Your InfluxDB URL (e.g., `http://influxdb:8086`)
+        -   `Password`: Your InfluxDB Token (the provider uses the password field for the token).
+        -   `Login`: Your InfluxDB Organization.
+        -   `Extra`: `{"bucket": "your_bucket_name"}` (must contain the target bucket).
 
     2.  **Airflow Variables for Fitbit:**
         -   `fitbit_api_bearer_token`: Your Fitbit API Bearer Token.
