@@ -16,11 +16,6 @@ To get started with development, you need to set up a local virtual environment 
     ```bash
     uv venv
     ```
-    Then, activate it using the script for your shell:
-    ```bash
-    # On macOS and Linux
-    source .venv/bin/activate
-    ```
 
 2.  **Install dependencies:**
     Once the virtual environment is activated, sync it with the `uv.lock` file. This command ensures your environment has the exact versions of all dependencies specified in the lock file.
@@ -33,7 +28,7 @@ To get started with development, you need to set up a local virtual environment 
 This project uses `pytest` for testing. With your virtual environment activated, you can run the entire test suite with a single command:
 
 ```bash
-pytest
+uv run pytest
 ```
 
 ## DAG Configuration

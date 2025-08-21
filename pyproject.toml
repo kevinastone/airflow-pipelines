@@ -5,7 +5,7 @@ description = "A collection of Apache Airflow DAGs."
 requires-python = ">=3.11"
 dependencies = ["apache-airflow", "influxdb-client", "pendulum", "requests"]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = ["pytest", "pytest-mock"]
 
 [tool.pytest.ini_options]
