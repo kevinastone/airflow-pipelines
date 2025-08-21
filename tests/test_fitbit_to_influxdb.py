@@ -12,14 +12,14 @@ from dags.fitbit_to_influxdb import (
 def mock_airflow_variables(mocker):
     """Mock Airflow Variables used in the tasks."""
 
-    def get_variable(key, default_var=None):
+    def get_variable(key, default=None):
         if key == "fitbit_user_id":
             return "-"
         if key == "fitbit_api_bearer_token":
             return "test_bearer_token"
-        return default_var
+        return default
 
-    mocker.patch("airflow.models.Variable.get", side_effect=get_variable)
+    mocker.patch("airflow.sdk.Variable.get", side_effect=get_variable)
 
 
 def test_fetch_fitbit_weight_data_success(mocker, mock_airflow_variables):

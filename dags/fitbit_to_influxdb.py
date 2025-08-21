@@ -2,10 +2,9 @@ import logging
 
 import pendulum
 import requests
-from airflow.decorators import dag, task
 from airflow.hooks.base import BaseHook
-from airflow.models import Variable
 from airflow.providers.influxdb.hooks.influxdb import InfluxDBHook
+from airflow.sdk import Variable, dag, task
 
 # Set up logging
 log = logging.getLogger(__name__)
@@ -28,7 +27,7 @@ def fetch_fitbit_weight_data(ds=None):
     Fetches weight data for a given date from the Fitbit API using
     a bearer token.
     """
-    user_id = Variable.get("fitbit_user_id", default_var="-")
+    user_id = Variable.get("fitbit_user_id", default="-")
     bearer_token = Variable.get("fitbit_api_bearer_token")
     api_url = f"https://api.fitbit.com/1/user/{user_id}/body/log/weight/date/{ds}.json"
 
@@ -132,3 +131,6 @@ def fitbit_to_influxdb_dag():
 
 # Instantiate the DAG
 fitbit_to_influxdb_dag_instance = fitbit_to_influxdb_dag()
+
+if __name__ == "__main__":
+    fitbit_to_influxdb_dag_instance.test()
