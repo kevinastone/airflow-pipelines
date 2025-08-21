@@ -4,7 +4,7 @@ This repository stores custom Apache Airflow pipelines (DAGs) for various data i
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.11+
 - [uv](https://github.com/astral-sh/uv)
 
 ## Development Setup
