@@ -15,6 +15,4 @@ dev = ["pytest", "pytest-mock"]
 
 [tool.pytest.ini_options]
 pythonpath = "."
-filterwarnings = [
-    "ignore:datetime.datetime.utcnow() is deprecated:DeprecationWarning",
-]
+filterwarnings = ["ignore::DeprecationWarning:reactivex"]
