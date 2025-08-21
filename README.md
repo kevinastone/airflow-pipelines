@@ -25,7 +25,7 @@ To get started with development, you need to set up a local virtual environment 
 2.  **Install dependencies:**
     Once the virtual environment is activated, sync it with the `uv.lock` file. This command ensures your environment has the exact versions of all dependencies specified in the lock file.
     ```bash
-    uv pip sync uv.lock
+    uv sync --locked --all-extras --dev
     ```
 
 ## Running Tests

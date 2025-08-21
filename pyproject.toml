@@ -2,6 +2,7 @@
 name = "airflow-pipelines"
 version = "0.1.0"
 description = "A collection of Apache Airflow DAGs."
+requires-python = ">=3.11"
 dependencies = ["apache-airflow", "influxdb-client", "pendulum", "requests"]
 
 [project.optional-dependencies]
