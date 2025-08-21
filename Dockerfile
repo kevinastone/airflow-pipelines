@@ -1,4 +1,10 @@
 FROM apache/airflow:3.0.2
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync --locked
+USER root
+ENV UV_COMPILE_BYTECODE=1
+
+COPY pyproject.toml pylock.toml ./
+RUN uv pip install -r pylock.toml --system
+
+# Return back to the unprivileged user
+USER airflow
