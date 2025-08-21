@@ -1,7 +1,10 @@
 name: Docker Publish
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Python CI"]
+    types:
+      - completed
     branches:
       - main
 
@@ -13,6 +16,7 @@ jobs:
   publish:
     name: Publish Docker Image
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       packages: write
@@ -20,6 +24,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
