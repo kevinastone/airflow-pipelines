@@ -43,3 +43,15 @@ If you need to run tests, follow this two-step process:
 ### General Usage
 
 For any package or tool, first ensure it's installed with `uv pip install <package-name>`, then execute it with `uv run <command>`. This avoids issues with shell paths and ensures you are using the project-specific dependencies.
+
+## Git Practices
+
+### Amending Commits
+
+Before amending a commit, you must ask for confirmation from the user. Amending rewrites Git history, and it's important to ensure this is the desired action.
+
+**Example Flow:**
+
+1.  **Propose the amendment:** "I've staged the necessary corrections. I recommend amending the previous commit to keep the history clean. Shall I proceed?"
+2.  **Wait for confirmation:** Await an explicit "yes" or "proceed" from the user.
+3.  **Execute:** Only run `git commit --amend` after receiving confirmation.
