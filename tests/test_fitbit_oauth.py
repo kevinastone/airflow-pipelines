@@ -9,6 +9,8 @@ from dags.fitbit_to_influxdb import get_fitbit_oauth_token
 # --- Constants for Mocking ---
 MOCK_CLIENT_ID = "test_client_id"
 MOCK_CLIENT_SECRET = "test_client_secret"
+MOCK_REFRESH_TOKEN = "mock_refresh_token_from_test"
+MOCK_NEW_REFRESH_TOKEN = "mock_new_refresh_token"
 MOCK_ACCESS_TOKEN = "mock_access_token_from_test"
 
 
@@ -20,14 +22,25 @@ def mock_fitbit_connection(mocker):
     mock_conn = mocker.Mock()
     mock_conn.login = MOCK_CLIENT_ID
     mock_conn.password = MOCK_CLIENT_SECRET
+
     mocker.patch("airflow.hooks.base.BaseHook.get_connection", return_value=mock_conn)
     return mock_conn
 
 
-def test_get_fitbit_oauth_token_success(mocker, mock_fitbit_connection):
+@pytest.fixture
+def mock_airflow_variables(mocker):
+    """Mocks Airflow Variable.get and Variable.set."""
+    mock_variable_get = mocker.patch(
+        "dags.fitbit_to_influxdb.Variable.get", return_value=MOCK_REFRESH_TOKEN
+    )
+    mock_variable_set = mocker.patch("dags.fitbit_to_influxdb.Variable.set")
+    return mock_variable_get, mock_variable_set
+
+
+def test_get_fitbit_oauth_token_success(mocker, mock_fitbit_connection, mock_airflow_variables):
     """
-    Tests the successful fetching of a Fitbit OAuth token using the
-    client credentials grant type.
+    Tests the successful fetching of a Fitbit OAuth token and ensures the
+    refresh token variable is NOT updated if the API doesn't return a new one.
     """
     # Mock the response from the httpx client
     mock_response = mocker.Mock()
@@ -43,6 +56,8 @@ def test_get_fitbit_oauth_token_success(mocker, mock_fitbit_connection):
     mock_client = mocker.patch("httpx.Client").return_value.__enter__.return_value
     mock_client.post.return_value = mock_response
 
+    _, mock_variable_set = mock_airflow_variables
+
     # Execute the actual task function
     result = get_fitbit_oauth_token.function()
 
@@ -56,7 +71,10 @@ def test_get_fitbit_oauth_token_success(mocker, mock_fitbit_connection):
     assert call_args[0] == "https://api.fitbit.com/oauth2/token"
 
     # 3. Check the payload sent in the request
-    expected_payload = {"grant_type": "client_credentials"}
+    expected_payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": MOCK_REFRESH_TOKEN,
+    }
     assert call_kwargs["data"] == expected_payload
 
     # 4. Check that the correct Basic Auth headers were constructed and sent
@@ -68,8 +86,12 @@ def test_get_fitbit_oauth_token_success(mocker, mock_fitbit_connection):
     }
     assert call_kwargs["headers"] == expected_headers
 
+    # 5. Since the mock response didn't include a new refresh token,
+    #    Variable.set should not have been called.
+    mock_variable_set.assert_not_called()
 
-def test_get_fitbit_oauth_token_http_error(mocker, mock_fitbit_connection):
+
+def test_get_fitbit_oauth_token_http_error(mocker, mock_fitbit_connection, mock_airflow_variables):
     """
     Tests that the task properly raises an HTTPError if the Fitbit API
     returns an error status code.
@@ -84,7 +106,7 @@ def test_get_fitbit_oauth_token_http_error(mocker, mock_fitbit_connection):
         get_fitbit_oauth_token.function()
 
 
-def test_get_fitbit_oauth_token_missing_credentials(mocker):
+def test_get_fitbit_oauth_token_missing_credentials(mocker, mock_airflow_variables):
     """
     Tests that the task raises a descriptive ValueError if the Airflow
     connection is missing required fields (e.g., password).
@@ -96,5 +118,49 @@ def test_get_fitbit_oauth_token_missing_credentials(mocker):
     mocker.patch("airflow.hooks.base.BaseHook.get_connection", return_value=mock_conn)
 
     # Assert that a ValueError is raised and check that the error message is helpful
-    with pytest.raises(ValueError, match="missing required fields"):
+    with pytest.raises(ValueError, match="Fitbit connection is missing"):
         get_fitbit_oauth_token.function()
+
+
+def test_get_fitbit_oauth_token_missing_refresh_token(mocker, mock_fitbit_connection):
+    """
+    Tests that a ValueError is raised if the `fitbit_refresh_token`
+    Airflow Variable is missing.
+    """
+    # Mock Variable.get to return None, as if the variable is not set.
+    mocker.patch("dags.fitbit_to_influxdb.Variable.get", return_value=None)
+
+    with pytest.raises(ValueError, match="Variable is not set"):
+        get_fitbit_oauth_token.function()
+
+
+def test_get_fitbit_oauth_token_updates_variable_on_new_refresh_token(
+    mocker, mock_fitbit_connection, mock_airflow_variables
+):
+    """
+    Tests that the Airflow Variable is updated if the Fitbit API returns
+    a new refresh token.
+    """
+    # --- Mocks ---
+    mock_variable_get, mock_variable_set = mock_airflow_variables
+
+    # Mock the API response to include a new refresh token
+    mock_response = mocker.Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "access_token": MOCK_ACCESS_TOKEN,
+        "refresh_token": MOCK_NEW_REFRESH_TOKEN,
+        "token_type": "Bearer",
+    }
+    mock_client = mocker.patch("httpx.Client").return_value.__enter__.return_value
+    mock_client.post.return_value = mock_response
+
+    # --- Execute ---
+    get_fitbit_oauth_token.function()
+
+    # --- Assertions ---
+    # 1. Verify that Variable.get was called to fetch the old token
+    mock_variable_get.assert_called_once_with("fitbit_refresh_token", default=None)
+
+    # 2. Verify that Variable.set was called to store the new token
+    mock_variable_set.assert_called_once_with("fitbit_refresh_token", MOCK_NEW_REFRESH_TOKEN)

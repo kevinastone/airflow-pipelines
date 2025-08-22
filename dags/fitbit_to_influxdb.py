@@ -23,16 +23,21 @@ FITBIT_CONN_ID = "fitbit_default"
 
 @task()
 def get_fitbit_oauth_token():
-    """Refreshes and returns a Fitbit OAuth2 access token."""
+    """
+    Refreshes and returns a Fitbit OAuth2 access token. If a new refresh
+    token is issued, it is stored in an Airflow Variable.
+    """
     try:
         # Retrieve connection details from Airflow
         conn = BaseHook.get_connection(FITBIT_CONN_ID)
         client_id = conn.login
         client_secret = conn.password
-        if not all([client_id, client_secret]):
+        refresh_token = Variable.get("fitbit_refresh_token", default=None)
+
+        if not all([client_id, client_secret, refresh_token]):
             raise ValueError(
-                f"Fitbit connection '{FITBIT_CONN_ID}' is missing required fields "
-                "(login or password)."
+                "Fitbit connection is missing client_id/secret, or "
+                "the 'fitbit_refresh_token' Variable is not set."
             )
 
         # Fitbit token refresh endpoint
@@ -48,7 +53,8 @@ def get_fitbit_oauth_token():
 
         # Prepare the request payload
         payload = {
-            "grant_type": "client_credentials",
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
         }
 
         # Make the POST request to refresh the token
@@ -57,8 +63,19 @@ def get_fitbit_oauth_token():
         response.raise_for_status()
         token_data = response.json()
 
+        new_access_token = token_data["access_token"]
+        new_refresh_token = token_data.get("refresh_token")
+
+        # If a new refresh token is issued, update the Airflow Variable.
+        if new_refresh_token and new_refresh_token != refresh_token:
+            log.info("Updating Airflow Variable with new Fitbit refresh token.")
+            Variable.set("fitbit_refresh_token", new_refresh_token)
+            log.info("Successfully updated 'fitbit_refresh_token' Variable.")
+        else:
+            log.info("Fitbit refresh token is unchanged. No update required.")
+
         log.info("Successfully refreshed Fitbit OAuth token.")
-        return token_data["access_token"]
+        return new_access_token
 
     except httpx.HTTPError as e:
         log.error(f"HTTP error while refreshing Fitbit token: {e}")
@@ -170,8 +187,9 @@ def write_data_to_influxdb(weight_data):
         -   `Login`: Your Fitbit App's Client ID.
         -   `Password`: Your Fitbit App's Client Secret.
 
-    3.  **Airflow Variable for Fitbit (optional):**
-        -   `fitbit_user_id`: Defaults to `-` for the authenticated user.
+    3.  **Airflow Variables for Fitbit:**
+        -   `fitbit_refresh_token`: Your OAuth2 refresh token for the Fitbit API.
+        -   `fitbit_user_id` (optional): Defaults to `-` for the authenticated user.
     """,
     tags=["fitbit", "influxdb", "api", "health"],
 )
