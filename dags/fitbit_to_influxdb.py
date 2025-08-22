@@ -80,8 +80,10 @@ def fetch_fitbit_weight_data(access_token, ds=None):
     api_url = f"https://api.fitbit.com/1/user/{user_id}/body/log/weight/date/{ds}.json"
 
     headers = {"Authorization": f"Bearer {access_token}"}
+    log.info(f"{api_url=}, {headers=}")
 
     response = requests.get(api_url, headers=headers)
+    log.info(f"{response=}")
     response.raise_for_status()
 
     data = response.json().get("weight", [])
