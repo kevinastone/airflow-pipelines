@@ -1,3 +1,4 @@
+import base64
 import logging
 
 import pendulum
@@ -16,22 +17,69 @@ log = logging.getLogger(__name__)
 # This DAG uses the InfluxDB Airflow Provider.
 INFLUXDB_CONN_ID = "influxdb_default"
 
-# Fitbit Credentials (Store in Airflow Variables)
-# - fitbit_api_bearer_token: Your Fitbit API Bearer Token.
-# - fitbit_user_id (optional): Defaults to '-' for the authenticated user.
+# Fitbit Connection Details (Store in Airflow Connection)
+FITBIT_CONN_ID = "fitbit_default"
 
 
 @task()
-def fetch_fitbit_weight_data(ds=None):
+def get_fitbit_oauth_token():
+    """Refreshes and returns a Fitbit OAuth2 access token."""
+    try:
+        # Retrieve connection details from Airflow
+        conn = BaseHook.get_connection(FITBIT_CONN_ID)
+        client_id = conn.login
+        client_secret = conn.password
+        if not all([client_id, client_secret]):
+            raise ValueError(
+                f"Fitbit connection '{FITBIT_CONN_ID}' is missing required fields "
+                "(login or password)."
+            )
+
+        # Fitbit token refresh endpoint
+        token_url = "https://api.fitbit.com/oauth2/token"
+
+        # Prepare the authorization header for Basic Auth
+        auth_string = f"{client_id}:{client_secret}"
+        encoded_auth_string = base64.b64encode(auth_string.encode("utf-8")).decode("utf-8")
+        headers = {
+            "Authorization": f"Basic {encoded_auth_string}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+
+        # Prepare the request payload
+        payload = {
+            "grant_type": "client_credentials",
+        }
+
+        # Make the POST request to refresh the token
+        response = requests.post(token_url, data=payload, headers=headers)
+        response.raise_for_status()
+        token_data = response.json()
+
+        log.info("Successfully refreshed Fitbit OAuth token.")
+        return token_data["access_token"]
+
+    except requests.exceptions.RequestException as e:
+        log.error(f"HTTP error while refreshing Fitbit token: {e}")
+        raise
+    except (KeyError, ValueError) as e:
+        log.error(f"Error processing Fitbit token data: {e}")
+        raise
+    except Exception as e:
+        log.error(f"An unexpected error occurred: {e}")
+        raise
+
+
+@task()
+def fetch_fitbit_weight_data(access_token, ds=None):
     """
     Fetches weight data for a given date from the Fitbit API using
-    a bearer token.
+    an OAuth2 access token.
     """
     user_id = Variable.get("fitbit_user_id", default="-")
-    bearer_token = Variable.get("fitbit_api_bearer_token")
     api_url = f"https://api.fitbit.com/1/user/{user_id}/body/log/weight/date/{ds}.json"
 
-    headers = {"Authorization": f"Bearer {bearer_token}"}
+    headers = {"Authorization": f"Bearer {access_token}"}
 
     response = requests.get(api_url, headers=headers)
     response.raise_for_status()
@@ -114,9 +162,14 @@ def write_data_to_influxdb(weight_data):
         -   `Login`: Your InfluxDB Organization.
         -   `Extra`: `{"bucket": "your_bucket_name"}` (must contain the target bucket).
 
-    2.  **Airflow Variables for Fitbit:**
-        -   `fitbit_api_bearer_token`: Your Fitbit API Bearer Token.
-        -   `fitbit_user_id` (optional): Defaults to `-` for the authenticated user.
+    2.  **Airflow Connection for Fitbit:**
+        -   `Conn Id`: `fitbit_default`
+        -   `Conn Type`: `HTTP`
+        -   `Login`: Your Fitbit App's Client ID.
+        -   `Password`: Your Fitbit App's Client Secret.
+
+    3.  **Airflow Variable for Fitbit (optional):**
+        -   `fitbit_user_id`: Defaults to `-` for the authenticated user.
     """,
     tags=["fitbit", "influxdb", "api", "health"],
 )
@@ -125,7 +178,8 @@ def fitbit_to_influxdb_dag():
     DAG to fetch weight data from Fitbit and load it into InfluxDB.
     """
     # Define the DAG's task flow
-    weight_data_from_api = fetch_fitbit_weight_data()
+    access_token = get_fitbit_oauth_token()
+    weight_data_from_api = fetch_fitbit_weight_data(access_token)
     write_data_to_influxdb(weight_data_from_api)
 
 

@@ -9,20 +9,12 @@ from dags.fitbit_to_influxdb import (
 
 
 @pytest.fixture
-def mock_airflow_variables(mocker):
-    """Mock Airflow Variables used in the tasks."""
-
-    def get_variable(key, default=None):
-        if key == "fitbit_user_id":
-            return "-"
-        if key == "fitbit_api_bearer_token":
-            return "test_bearer_token"
-        return default
-
-    mocker.patch("airflow.sdk.Variable.get", side_effect=get_variable)
+def mock_fitbit_user_id_variable(mocker):
+    """Mock the 'fitbit_user_id' Airflow Variable."""
+    mocker.patch("airflow.sdk.Variable.get", return_value="-")
 
 
-def test_fetch_fitbit_weight_data_success(mocker, mock_airflow_variables):
+def test_fetch_fitbit_weight_data_success(mocker, mock_fitbit_user_id_variable):
     """Test the Fitbit fetch task with a successful API response."""
     mock_response = mocker.Mock()
     mock_response.status_code = 200
@@ -40,8 +32,8 @@ def test_fetch_fitbit_weight_data_success(mocker, mock_airflow_variables):
     }
     mocker.patch("requests.get", return_value=mock_response)
 
-    # We call the unwrapped Python function for testing
-    result = fetch_fitbit_weight_data.function(ds="2023-01-15")
+    # We call the unwrapped Python function for testing, passing a mock access token
+    result = fetch_fitbit_weight_data.function(access_token="mock_token", ds="2023-01-15")
 
     assert result is not None
     assert len(result) == 1
@@ -49,14 +41,14 @@ def test_fetch_fitbit_weight_data_success(mocker, mock_airflow_variables):
     assert result[0]["date"] == "2023-01-15"
 
 
-def test_fetch_fitbit_weight_data_no_data(mocker, mock_airflow_variables):
+def test_fetch_fitbit_weight_data_no_data(mocker, mock_fitbit_user_id_variable):
     """Test the Fitbit fetch task when the API returns no weight logs."""
     mock_response = mocker.Mock()
     mock_response.status_code = 200
     mock_response.json.return_value = {"weight": []}  # No data
     mocker.patch("requests.get", return_value=mock_response)
 
-    result = fetch_fitbit_weight_data.function(ds="2023-01-15")
+    result = fetch_fitbit_weight_data.function(access_token="mock_token", ds="2023-01-15")
 
     assert result is None
 
