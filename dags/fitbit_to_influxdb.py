@@ -1,8 +1,8 @@
 import base64
 import logging
 
+import httpx
 import pendulum
-import requests
 from airflow.hooks.base import BaseHook
 from airflow.providers.influxdb.hooks.influxdb import InfluxDBHook
 from airflow.sdk import Variable, dag, task
@@ -52,14 +52,15 @@ def get_fitbit_oauth_token():
         }
 
         # Make the POST request to refresh the token
-        response = requests.post(token_url, data=payload, headers=headers)
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(token_url, data=payload, headers=headers)
         response.raise_for_status()
         token_data = response.json()
 
         log.info("Successfully refreshed Fitbit OAuth token.")
         return token_data["access_token"]
 
-    except requests.exceptions.RequestException as e:
+    except httpx.HTTPError as e:
         log.error(f"HTTP error while refreshing Fitbit token: {e}")
         raise
     except (KeyError, ValueError) as e:
@@ -80,10 +81,9 @@ def fetch_fitbit_weight_data(access_token, ds=None):
     api_url = f"https://api.fitbit.com/1/user/{user_id}/body/log/weight/date/{ds}.json"
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    log.info(f"{api_url=}, {headers=}")
 
-    response = requests.get(api_url, headers=headers)
-    log.info(f"{response=}")
+    with httpx.Client(timeout=30.0) as client:
+        response = client.get(api_url, headers=headers)
     response.raise_for_status()
 
     data = response.json().get("weight", [])
@@ -146,7 +146,7 @@ def write_data_to_influxdb(weight_data):
 
 @dag(
     dag_id="fitbit_to_influxdb_weight",
-    start_date=pendulum.datetime(2023, 1, 1, tz="UTC"),
+    start_date=pendulum.datetime(2023, 1, 1, tz="US/Pacific"),
     schedule="@daily",
     catchup=False,
     doc_md="""

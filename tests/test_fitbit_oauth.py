@@ -1,7 +1,7 @@
 import base64
 
+import httpx
 import pytest
-import requests
 
 # The .function attribute unwraps the TaskFlow decorator for direct testing
 from dags.fitbit_to_influxdb import get_fitbit_oauth_token
@@ -29,7 +29,7 @@ def test_get_fitbit_oauth_token_success(mocker, mock_fitbit_connection):
     Tests the successful fetching of a Fitbit OAuth token using the
     client credentials grant type.
     """
-    # Mock the response from the requests.post call
+    # Mock the response from the httpx client
     mock_response = mocker.Mock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
@@ -38,8 +38,10 @@ def test_get_fitbit_oauth_token_success(mocker, mock_fitbit_connection):
         "expires_in": 3600,
         "scope": "weight",
     }
-    # Patch the requests.post method to return our mock response
-    mock_post = mocker.patch("requests.post", return_value=mock_response)
+    # The DAG uses `with httpx.Client(...) as client:`, so we need to mock the
+    # client's context manager and the `post` call.
+    mock_client = mocker.patch("httpx.Client").return_value.__enter__.return_value
+    mock_client.post.return_value = mock_response
 
     # Execute the actual task function
     result = get_fitbit_oauth_token.function()
@@ -48,9 +50,9 @@ def test_get_fitbit_oauth_token_success(mocker, mock_fitbit_connection):
     # 1. Assert the function returns the expected access token
     assert result == MOCK_ACCESS_TOKEN
 
-    # 2. Verify that requests.post was called correctly
-    mock_post.assert_called_once()
-    call_args, call_kwargs = mock_post.call_args
+    # 2. Verify that httpx.Client.post was called correctly
+    mock_client.post.assert_called_once()
+    call_args, call_kwargs = mock_client.post.call_args
     assert call_args[0] == "https://api.fitbit.com/oauth2/token"
 
     # 3. Check the payload sent in the request
@@ -73,13 +75,12 @@ def test_get_fitbit_oauth_token_http_error(mocker, mock_fitbit_connection):
     returns an error status code.
     """
     # Configure the mock to simulate a failed API call by raising an exception
-    mocker.patch(
-        "requests.post",
-        side_effect=requests.exceptions.HTTPError("401 Client Error: Unauthorized"),
-    )
+    # Patch the client and configure the post method to raise an HTTPError
+    mock_client = mocker.patch("httpx.Client").return_value.__enter__.return_value
+    mock_client.post.side_effect = httpx.HTTPError("401 Client Error: Unauthorized")
 
     # Use pytest.raises to assert that our function correctly bubbles up the exception
-    with pytest.raises(requests.exceptions.HTTPError):
+    with pytest.raises(httpx.HTTPError):
         get_fitbit_oauth_token.function()
 
 

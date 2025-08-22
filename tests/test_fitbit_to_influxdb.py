@@ -16,28 +16,30 @@ def mock_fitbit_user_id_variable(mocker):
 
 def test_fetch_fitbit_weight_data_success(mocker, mock_fitbit_user_id_variable):
     """Test the Fitbit fetch task with a successful API response."""
+    # Mock the response from httpx.get
     mock_response = mocker.Mock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
         "weight": [
             {
-                "bmi": 25.0,
+                "bmi": 22.5,
                 "date": "2023-01-15",
                 "logId": 12345,
-                "time": "10:30:00",
-                "weight": 80.5,
+                "time": "08:00:00",
+                "weight": 70.5,
                 "source": "Aria",
             }
         ]
     }
-    mocker.patch("requests.get", return_value=mock_response)
+    mock_client = mocker.patch("httpx.Client").return_value.__enter__.return_value
+    mock_client.get.return_value = mock_response
 
     # We call the unwrapped Python function for testing, passing a mock access token
     result = fetch_fitbit_weight_data.function(access_token="mock_token", ds="2023-01-15")
 
     assert result is not None
     assert len(result) == 1
-    assert result[0]["weight"] == 80.5
+    assert result[0]["weight"] == 70.5
     assert result[0]["date"] == "2023-01-15"
 
 
@@ -46,7 +48,8 @@ def test_fetch_fitbit_weight_data_no_data(mocker, mock_fitbit_user_id_variable):
     mock_response = mocker.Mock()
     mock_response.status_code = 200
     mock_response.json.return_value = {"weight": []}  # No data
-    mocker.patch("requests.get", return_value=mock_response)
+    mock_client = mocker.patch("httpx.Client").return_value.__enter__.return_value
+    mock_client.get.return_value = mock_response
 
     result = fetch_fitbit_weight_data.function(access_token="mock_token", ds="2023-01-15")
 

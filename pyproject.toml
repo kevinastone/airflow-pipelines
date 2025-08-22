@@ -7,7 +7,7 @@ dependencies = [
     "apache-airflow",
     "apache-airflow-providers-influxdb",
     "pendulum",
-    "requests",
+    "httpx",
 ]
 
 [dependency-groups]
